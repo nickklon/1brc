@@ -261,8 +261,31 @@ public class CalculateAverage_nickklon {
             }
 
             String station = new String(arr, 0, semicolon);
-            double value = Double.parseDouble(new String(arr, semicolon + 1, index - semicolon - 1));
+            double value = parseDouble(arr, semicolon + 1, index - semicolon - 1);
             return new Measurement(station, value);
+        }
+
+        private double parseDouble(byte[] arr, int offset, int length) {
+            double result = 0.0;
+            double multiplier = 0.1;
+            int end = offset + length - 1;
+
+            if (arr[offset] == 0x2D) { // minus sign
+                offset++;
+                multiplier *= -1.0d;
+            }
+
+            int diff;
+            for (int i = end; i >= offset; i--) {
+                if (arr[i] == 0x2E) { // decimal
+                    continue;
+                }
+                diff = arr[i] - 0x30;
+                result += (((double) diff) * multiplier);
+                multiplier *= 10.0;
+            }
+
+            return result;
         }
 
         private void init() throws IOException {
