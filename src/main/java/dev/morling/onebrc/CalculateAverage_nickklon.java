@@ -17,19 +17,13 @@ package dev.morling.onebrc;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.AbstractMap;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
-
-import static java.util.stream.Collectors.groupingBy;
 
 public class CalculateAverage_nickklon {
 
@@ -180,26 +174,26 @@ public class CalculateAverage_nickklon {
     }
 
     static class BufferingRandomAccessFileReader {
-        private final long firstByte;
         private final long lastByteExclusive;
         private long currentByte;
-        private final RandomAccessFile file;
 
-        private static final int bufSize = 8192;
         private static final int arrSize = 1024;
 
-        private final byte[] bufArr = new byte[bufSize];
-        private final ByteBuffer buf;
         private final byte[] arr = new byte[arrSize];
+
+        private final MappedByteBuffer buf;
 
 
         BufferingRandomAccessFileReader(long firstByte, long lastByte, RandomAccessFile file) throws IOException {
-            this.firstByte = firstByte;
             currentByte = firstByte;
             this.lastByteExclusive = lastByte;
-            this.file = file;
 
-            buf = ByteBuffer.allocate(bufSize);
+            if (firstByte > 0) {
+                file.seek(firstByte - 1L);
+                currentByte--;
+            }
+            FileChannel c = file.getChannel();
+            buf = c.map(FileChannel.MapMode.READ_ONLY, c.position(), (lastByteExclusive == file.length()) ? lastByteExclusive - firstByte : lastByteExclusive - firstByte + 1024);
 
             init();
         }
@@ -262,8 +256,7 @@ public class CalculateAverage_nickklon {
                     arr[index++] = b;
 
                 } else {
-                    readToBuffer();
-                    if (!buf.hasRemaining()) return null;
+                    return null;
                 }
             }
 
@@ -274,32 +267,17 @@ public class CalculateAverage_nickklon {
 
         private void init() throws IOException {
 
-            if (firstByte == 0)
-                readToBuffer();
-            else  {
-                file.seek(firstByte - 1L);
-                currentByte--;
-                readToBuffer();
-
-                // read up thru the first newline
-                byte b = buf.get();
-                currentByte++;
-                while (b != NEWLINE) {
-                    if (!buf.hasRemaining()) {
-                        readToBuffer();
-                    }
-                    b = buf.get();
-                    currentByte++;
+            // read up thru the first newline
+            byte b = buf.get();
+            currentByte++;
+            while (b != NEWLINE) {
+                if (!buf.hasRemaining()) {
+                    throw new RuntimeException("No newline in file split");
                 }
+                b = buf.get();
+                currentByte++;
             }
-        }
 
-        private void readToBuffer() throws IOException {
-            buf.clear();
-            int read = file.read(bufArr);
-            if (read > -1) buf.put(bufArr, 0, read);
-            buf.flip();
         }
-
     }
 }
